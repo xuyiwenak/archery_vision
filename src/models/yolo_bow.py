@@ -1,9 +1,11 @@
+import os
 import cv2
 import logging
 from datetime import datetime
 import torch
 from ultralytics import YOLO
 import math
+from src.enums.action_state import ActionState
 
 class YoloBow:
     # 配置日志格式
@@ -31,7 +33,16 @@ class YoloBow:
 
         # 初始化模型并指定设备
         model_name = 'yolo11x-pose'
-        model = YOLO(f'{model_name}.pt')
+        model_path = f'data/models/{model_name}.pt'
+        
+        # 如果本地没有模型文件,则下载
+        if not os.path.exists(model_path):
+            logger.info(f"⏬ 下载 {model_name} 模型...")
+            model = YOLO(f'{model_name}.pt')
+        else:
+            logger.info(f"📂 使用本地 {model_name} 模型")
+            model = YOLO(model_path)
+            
         model.to(device)
         logger.info(f"✅ 加载 {model_name} 模型到 {device} 设备")
 
@@ -126,41 +137,38 @@ class YoloBow:
         angle_rad = math.acos(cos_theta)
         
         # 使用叉积判断角度方向
-        # 叉积的z分量（二维向量的叉积结果是一个标量）
         cross_product = vector_ab[0] * vector_cd[1] - vector_ab[1] * vector_cd[0]
         
-        # 如果cross_product为正，角度为逆时针方向（正方向）
-        # 如果为负，角度为顺时针方向（负方向）
-        if cross_product < 0:
-            angle_rad = -angle_rad
-        
-        # 转换为角度
+        # 转换为角度 (0-360范围)
         angle_deg = math.degrees(angle_rad)
-        return - angle_deg
+        if cross_product < 0:
+            angle_deg = 360 - angle_deg
+            
+        return angle_deg
 
     @classmethod
     def judge_action(cls, angle):
         """
         根据角度判断动作环节
         参数:
-            angle (float): 计算出的角度值（带符号）
+            angle (float): 计算出的角度值 (0-360范围)
         """
         cls.angle_list.append(angle)
 
-        if -30 <= angle < 12:
-            cls.release_angle = None # 重置撒放角
-            return "Lift"  # 举弓
+        if 330 <= angle < 360 or 0 < angle < 12:
+            cls.release_angle = None  # 重置撒放角
+            return ActionState.LIFT  # 举弓
         elif 12 <= angle < 155:
-            return "Draw"  # 开弓
-        elif cls.release_angle and cls.release_angle <= angle < 180:
-            return "Release"  # 撒放
+            return ActionState.DRAW  # 开弓
+        elif cls.release_angle and cls.release_angle <= angle <= 180:
+            return ActionState.RELEASE  # 撒放
         elif 155 <= angle < 180:
             previous_angle = cls.angle_list[-2]
             if previous_angle >= 150 and angle - previous_angle >= 4.5:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
                 cls.release_angle = angle
-                return "Release"  # 撒放
-            return "Solid"  # 固势
-        elif -180 <= angle < -120:
-            return "Release"  # 撒放
+                return ActionState.RELEASE  # 撒放
+            return ActionState.SOLID  # 固势
+        elif 180 <= angle < 240:
+            return ActionState.RELEASE  # 撒放
         else:
-            return '' 
+            return ActionState.UNKNOWN
