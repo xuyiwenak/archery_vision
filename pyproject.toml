@@ -1,0 +1,21 @@
+[project]
+name = "archery_vision"
+version = "0.1.0"
+description = "基于计算机视觉的美式猎弓射手姿态分析系统"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "ultralytics>=8.0.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "lap>=0.5.12",
+]
+requires-python = ">=3.13"
+
+
+[tool.rye]
+managed = true
+dev-dependencies = []
