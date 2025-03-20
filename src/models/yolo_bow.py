@@ -5,6 +5,7 @@ from datetime import datetime
 import torch
 from ultralytics import YOLO
 import math
+import csv
 from src.enums.action_state import ActionState
 
 class YoloBow:
@@ -22,6 +23,12 @@ class YoloBow:
     def process_video(cls, input_path, output_path):
         start_time = datetime.now()
         logger = logging.getLogger()
+
+        # 创建CSV文件
+        csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
+        csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['时间(秒)', '帧号', '角度', '动作环节'])
 
         # 检查GPU是否可用
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -65,9 +72,13 @@ class YoloBow:
             ret, frame = cap.read()
             if not ret: break
 
+            # 计算当前视频时间
+            current_time = processed / fps
+
             # 推理
             results = model.track(frame, imgsz=320, conf=0.5, verbose=False)[0]
             angle = 0
+            action_state = ActionState.UNKNOWN
             # 获取关键点数据
             keypoints = results.keypoints
             if keypoints is not None:
@@ -85,10 +96,16 @@ class YoloBow:
                     cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
                     # 计算夹角
                     angle = cls.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
+                    # 获取动作环节
+                    action_state = cls.judge_action(angle)
+                    # 记录数据到CSV
+                    csv_writer.writerow([f"{current_time:.2f}", processed, f"{angle:.2f}", action_state.value])
                     # 绘制角度值
                     cv2.putText(frame, f"Angle: {angle:.2f} deg", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     # 绘制技术环节
-                    cv2.putText(frame, f"Technical process: {cls.judge_action(angle)} ", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    cv2.putText(frame, f"Technical process: {action_state.value} ", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    # 绘制帧序号
+                    cv2.putText(frame, f"processed: {processed} ", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
             writer.write(frame)
 
@@ -109,16 +126,18 @@ class YoloBow:
         # 收尾工作
         cap.release()
         writer.release()
+        csv_file.close()
 
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info(
             f"✅ 处理完成: {processed}帧 | 总耗时 {total_time:.1f}s | "
             f"平均FPS {processed/total_time:.1f}\n"
-            f"输出文件: {output_path}"
+            f"输出文件: {output_path}\n"
+            f"数据文件: {csv_path}"
         )
 
     @staticmethod
-    def calculate_angle(a, b, c, d):
+    def calculate_angle(c, d, a, b):
         # 计算向量AB和CD
         vector_ab = (b[0] - a[0], b[1] - a[1])
         vector_cd = (d[0] - c[0], d[1] - c[1])
@@ -154,21 +173,23 @@ class YoloBow:
             angle (float): 计算出的角度值 (0-360范围)
         """
         cls.angle_list.append(angle)
+        
+        release_angle_threshold = 4.5  # 固势->撒放 角度骤增差值阈值
 
         if 330 <= angle < 360 or 0 < angle < 12:
             cls.release_angle = None  # 重置撒放角
             return ActionState.LIFT  # 举弓
         elif 12 <= angle < 155:
             return ActionState.DRAW  # 开弓
-        elif cls.release_angle and cls.release_angle <= angle <= 180:
+        elif cls.release_angle and cls.release_angle - release_angle_threshold <= angle <= 180:
             return ActionState.RELEASE  # 撒放
         elif 155 <= angle < 180:
             previous_angle = cls.angle_list[-2]
-            if previous_angle >= 150 and angle - previous_angle >= 4.5:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
+            if previous_angle >= 150 and 20 > angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
                 cls.release_angle = angle
                 return ActionState.RELEASE  # 撒放
             return ActionState.SOLID  # 固势
-        elif 180 <= angle < 240:
+        elif 180 <= angle < 215:
             return ActionState.RELEASE  # 撒放
         else:
             return ActionState.UNKNOWN
