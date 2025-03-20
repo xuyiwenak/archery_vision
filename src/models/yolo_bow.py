@@ -112,7 +112,6 @@ class YoloBow:
             # 进度日志
             processed += 1
             if processed % 30 == 0:  # 每30帧输出一次进度
-                logger.info(angle)
                 elapsed = (datetime.now() - start_time).total_seconds()
                 fps_log = processed / elapsed
                 remain = (total_frames - processed) / fps_log if fps_log > 0 else 0
@@ -179,17 +178,18 @@ class YoloBow:
         if 330 <= angle < 360 or 0 < angle < 12:
             cls.release_angle = None  # 重置撒放角
             return ActionState.LIFT  # 举弓
-        elif 12 <= angle < 155:
+        elif 12 <= angle < 150:
             return ActionState.DRAW  # 开弓
-        elif cls.release_angle and cls.release_angle - release_angle_threshold <= angle <= 180:
+        elif cls.release_angle and cls.release_angle - release_angle_threshold <= angle <= 185:
             return ActionState.RELEASE  # 撒放
-        elif 155 <= angle < 180:
-            previous_angle = cls.angle_list[-2]
-            if previous_angle >= 150 and 20 > angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
+        elif 150 <= angle < 185:
+            previous_angles = cls.angle_list[-4:-1]
+            previous_angle = sum(previous_angles) / 3  # 取前三帧的平均值
+            if min(previous_angles) >= 150 and 20 > angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
                 cls.release_angle = angle
                 return ActionState.RELEASE  # 撒放
             return ActionState.SOLID  # 固势
-        elif 180 <= angle < 215:
+        elif 185 <= angle < 215:
             return ActionState.RELEASE  # 撒放
         else:
             return ActionState.UNKNOWN
