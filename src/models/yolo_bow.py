@@ -28,13 +28,17 @@ class YoloBow:
         csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
         csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['时间(秒)', '帧号', '角度', '动作环节'])
+        csv_writer.writerow(['帧号', '角度', '动作环节'])
 
-        # 检查GPU是否可用
+        # 检查设备
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        logger.info(f"🖥️ 使用设备: {device}")
-        if device == 'cuda':
+        if torch.cuda.is_available():
+            device = 'cuda' 
             logger.info(f"📊 GPU信息: {torch.cuda.get_device_name(0)}")
+        elif torch.backends.mps.is_available():
+            device = 'mps'
+        else:
+            device = 'cpu' 
 
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
@@ -72,9 +76,6 @@ class YoloBow:
             ret, frame = cap.read()
             if not ret: break
 
-            # 计算当前视频时间
-            current_time = processed / fps
-
             # 推理
             results = model.track(frame, imgsz=320, conf=0.5, verbose=False)[0]
             angle = 0
@@ -99,7 +100,7 @@ class YoloBow:
                     # 获取动作环节
                     action_state = cls.judge_action(angle)
                     # 记录数据到CSV
-                    csv_writer.writerow([f"{current_time:.2f}", processed, f"{angle:.2f}", action_state.value])
+                    csv_writer.writerow([processed, f"{angle:.2f}", action_state.value])
                     # 绘制角度值
                     cv2.putText(frame, f"Angle: {angle:.2f} deg", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     # 绘制技术环节
