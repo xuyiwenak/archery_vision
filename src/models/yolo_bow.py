@@ -67,7 +67,7 @@ class YoloBow:
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         frame_size = (int(cap.get(3)), int(cap.get(4)))
 
-        writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, frame_size)
+        writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'h264'), fps, frame_size)
         logger.info(f"📊 视频信息: {total_frames}帧 | {fps}FPS | 尺寸 {frame_size}")
 
         # 处理循环
