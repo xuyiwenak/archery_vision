@@ -20,6 +20,31 @@ class YoloBow:
     release_angle = None
 
     @classmethod
+    def parse_video(cls, cap, model):  # todo 改名
+        # 定义帧缓冲区和批处理大小
+        frame_buffer = []
+        batch_size = 12  # 根据显存调整批处理大小
+        while cap.isOpened():
+            success, frame = cap.read()
+            if not success: 
+                if frame_buffer:
+                    results = model.track(frame_buffer, imgsz=320, conf=0.5, verbose=False, stream=True)
+                    for k, result in enumerate(results):
+                        yield frame_buffer[k], result
+                break
+            # 将帧添加到缓冲区
+            frame_buffer.append(frame)
+            # 当缓冲区达到批处理大小时，进行批量处理
+            if len(frame_buffer) == batch_size:
+                # 批量处理帧
+                results = model.track(frame_buffer, imgsz=320, conf=0.5, verbose=False, stream=True)
+                # 处理结果（例如绘制轨迹等）
+                for k, result in enumerate(results):
+                    yield frame_buffer[k], result
+                frame_buffer = []
+
+
+    @classmethod
     def process_video(cls, input_path, output_path):
         start_time = datetime.now()
         logger = logging.getLogger()
@@ -66,22 +91,22 @@ class YoloBow:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         frame_size = (int(cap.get(3)), int(cap.get(4)))
-
+        # todo 视频编码确定
         writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'h264'), fps, frame_size)
         logger.info(f"📊 视频信息: {total_frames}帧 | {fps}FPS | 尺寸 {frame_size}")
 
         # 处理循环
         processed = 0
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret: break
 
+        for frame, result in cls.parse_video(cap, model):
+            frame = result.plot(boxes=False)
             # 推理
-            results = model.track(frame, imgsz=320, conf=0.5, verbose=False)[0]
+            # results = model.track(frame, imgsz=320, conf=0.5, verbose=False)
+            # result = results[0]
             angle = 0
             action_state = ActionState.UNKNOWN
             # 获取关键点数据
-            keypoints = results.keypoints
+            keypoints = result.keypoints
             if keypoints is not None:
                 for person in keypoints.xy:
                     if len(person) < 1:
@@ -91,6 +116,7 @@ class YoloBow:
                     right_shoulder = person[6].cpu().numpy()
                     left_elbow = person[7].cpu().numpy()
                     right_elbow = person[8].cpu().numpy()
+                    # todo 未完整识别到两臂时不继续做分析处理，跳过进入下一帧
                     
                     # 绘制线段
                     cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
