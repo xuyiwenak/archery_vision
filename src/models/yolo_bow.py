@@ -1,11 +1,14 @@
 import os
 import cv2
 import logging
-from datetime import datetime
-import torch
-from ultralytics import YOLO
 import math
 import csv
+from datetime import datetime
+
+import torch
+from ultralytics import YOLO
+import numpy as np
+
 from src.enums.action_state import ActionState
 
 # 配置日志格式
@@ -14,13 +17,39 @@ logging.basicConfig(
     format='%(asctime)s - %(message)s',
     datefmt='%H:%M:%S'
 )
+logger = logging.getLogger()
 
 class YoloBow:
     angle_list = []
     release_angle = None
 
     @classmethod
-    def parse_video(cls, cap, model):  # todo 改名
+    def get_device(cls):
+         # 自动选择最佳设备
+        device = 'cuda' if torch.cuda.is_available() else \
+                'mps' if torch.backends.mps.is_available() else 'cpu'
+        if device == 'cuda':
+            logger.info(f"🚀 使用CUDA加速: {torch.cuda.get_device_name(0)}")
+        return device
+
+    @classmethod
+    def get_model(cls):
+        # 初始化模型
+        model_name = 'yolo11x-pose'
+        model_path = f'data/models/{model_name}.pt'
+        # 如果本地没有模型文件,则下载
+        if not os.path.exists(model_path):
+            logger.info(f"⏬ 下载 {model_name} 模型...")
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            model = YOLO(f'{model_name}.pt')
+            model.export(format='pt', file=model_path)  # 保存模型到本地
+        else:
+            logger.info(f"📂 使用本地 {model_name} 模型")
+            model = YOLO(model_path)
+        return model
+    
+    @classmethod
+    def process_frames(cls, cap, model):
         # 定义帧缓冲区和批处理大小
         frame_buffer = []
         batch_size = 12  # 根据显存调整批处理大小
@@ -47,7 +76,6 @@ class YoloBow:
     @classmethod
     def process_video(cls, input_path, output_path):
         start_time = datetime.now()
-        logger = logging.getLogger()
 
         # 创建CSV文件
         csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
@@ -55,34 +83,14 @@ class YoloBow:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['帧号', '角度', '动作环节'])
 
-        # 检查设备
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        if torch.cuda.is_available():
-            device = 'cuda' 
-            logger.info(f"📊 GPU信息: {torch.cuda.get_device_name(0)}")
-        elif torch.backends.mps.is_available():
-            device = 'mps'
-        else:
-            device = 'cpu' 
-
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
-        # 初始化模型并指定设备
-        model_name = 'yolo11x-pose'
-        model_path = f'data/models/{model_name}.pt'
-        
-        # 如果本地没有模型文件,则下载
-        if not os.path.exists(model_path):
-            logger.info(f"⏬ 下载 {model_name} 模型...")
-            model = YOLO(f'{model_name}.pt')
-        else:
-            logger.info(f"📂 使用本地 {model_name} 模型")
-            model = YOLO(model_path)
-            
+        device = cls.get_device()
+        model = cls.get_model()
         model.to(device)
-        logger.info(f"✅ 加载 {model_name} 模型到 {device} 设备")
+        logger.info(f"✅ 加载 {model.model_name} 模型到 {device} 设备")
 
-        # 视频输入输出
+        # 视频输入
         cap = cv2.VideoCapture(input_path)
         if not cap.isOpened():
             logger.error("❌ 无法打开视频文件")
@@ -91,18 +99,16 @@ class YoloBow:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         frame_size = (int(cap.get(3)), int(cap.get(4)))
-        # todo 视频编码确定
-        writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'h264'), fps, frame_size)
         logger.info(f"📊 视频信息: {total_frames}帧 | {fps}FPS | 尺寸 {frame_size}")
+
+        # 视频输出
+        writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'avc1'), fps, frame_size)
 
         # 处理循环
         processed = 0
 
-        for frame, result in cls.parse_video(cap, model):
+        for frame, result in cls.process_frames(cap, model):
             frame = result.plot(boxes=False)
-            # 推理
-            # results = model.track(frame, imgsz=320, conf=0.5, verbose=False)
-            # result = results[0]
             angle = 0
             action_state = ActionState.UNKNOWN
             # 获取关键点数据
@@ -116,7 +122,7 @@ class YoloBow:
                     right_shoulder = person[6].cpu().numpy()
                     left_elbow = person[7].cpu().numpy()
                     right_elbow = person[8].cpu().numpy()
-                    # todo 未完整识别到两臂时不继续做分析处理，跳过进入下一帧
+                    # todo 未完整识别到两臂坐标时不继续做分析处理，跳过进入下一帧
                     
                     # 绘制线段
                     cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
@@ -163,33 +169,28 @@ class YoloBow:
         )
 
     @staticmethod
-    def calculate_angle(c, d, a, b):
-        # 计算向量AB和CD
-        vector_ab = (b[0] - a[0], b[1] - a[1])
-        vector_cd = (d[0] - c[0], d[1] - c[1])
+    def calculate_angle(c, d, a, b) -> float:
+        """计算两向量夹角（0-360度）"""
+        # 转换为numpy数组
+        vec_ab = np.array([b[0]-a[0], b[1]-a[1]])
+        vec_cd = np.array([d[0]-c[0], d[1]-c[1]])
         
-        # 计算点积和模长
-        dot_product = vector_ab[0] * vector_cd[0] + vector_ab[1] * vector_cd[1]
-        magnitude_ab = math.sqrt(vector_ab[0]**2 + vector_ab[1]**2)
-        magnitude_cd = math.sqrt(vector_cd[0]**2 + vector_cd[1]**2)
+        # 计算模长
+        norm_ab = np.linalg.norm(vec_ab)
+        norm_cd = np.linalg.norm(vec_cd)
         
-        # 计算夹角（弧度）
-        if magnitude_ab == 0 or magnitude_cd == 0:
-            return 0
-        cos_theta = dot_product / (magnitude_ab * magnitude_cd)
-        # 防止由于浮点数精度问题导致cos_theta超出范围[-1, 1]
-        cos_theta = max(min(cos_theta, 1), -1)
-        angle_rad = math.acos(cos_theta)
-        
-        # 使用叉积判断角度方向
-        cross_product = vector_ab[0] * vector_cd[1] - vector_ab[1] * vector_cd[0]
-        
-        # 转换为角度 (0-360范围)
-        angle_deg = math.degrees(angle_rad)
-        if cross_product < 0:
-            angle_deg = 360 - angle_deg
+        if norm_ab == 0 or norm_cd == 0:
+            return 0.0
             
-        return angle_deg
+        # 计算夹角（带方向）
+        cos_theta = np.dot(vec_ab, vec_cd) / (norm_ab * norm_cd)
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)
+        angle_rad = np.arccos(cos_theta)
+        
+        # 判断方向
+        cross = np.cross(vec_ab, vec_cd)
+        angle_deg = np.degrees(angle_rad)
+        return angle_deg if cross >= 0 else 360 - angle_deg
 
     @classmethod
     def judge_action(cls, angle):
