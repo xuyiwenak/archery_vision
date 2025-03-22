@@ -8,14 +8,14 @@ import math
 import csv
 from src.enums.action_state import ActionState
 
-class YoloBow:
-    # 配置日志格式
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(message)s',
-        datefmt='%H:%M:%S'
-    )
+# 配置日志格式
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
+class YoloBow:
     angle_list = []
     release_angle = None
 
