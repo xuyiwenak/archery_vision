@@ -72,16 +72,9 @@ class YoloBow:
                     yield frame_buffer[k], result
                 frame_buffer = []
 
-
     @classmethod
     def process_video(cls, input_path, output_path):
         start_time = datetime.now()
-
-        # 创建CSV文件
-        csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
-        csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['帧号', '角度', '动作环节'])
 
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
@@ -92,21 +85,17 @@ class YoloBow:
 
         # 视频输入
         cap = cv2.VideoCapture(input_path)
-        if not cap.isOpened():
-            logger.error("❌ 无法打开视频文件")
-            return
-
+        # 视频属性
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         frame_size = (int(cap.get(3)), int(cap.get(4)))
         logger.info(f"📊 视频信息: {total_frames}帧 | {fps}FPS | 尺寸 {frame_size}")
-
         # 视频输出
         writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'avc1'), fps, frame_size)
-
         # 处理循环
         processed = 0
-
+        
+        csv_data = []
         for frame, result in cls.process_frames(cap, model):
             frame = result.plot(boxes=False)
             angle = 0
@@ -131,14 +120,14 @@ class YoloBow:
                     angle = cls.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
                     # 获取动作环节
                     action_state = cls.judge_action(angle)
-                    # 记录数据到CSV
-                    csv_writer.writerow([processed, f"{angle:.2f}", action_state.value])
                     # 绘制角度值
                     cv2.putText(frame, f"Angle: {angle:.2f} deg", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     # 绘制技术环节
                     cv2.putText(frame, f"Technical process: {action_state.value} ", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     # 绘制帧序号
                     cv2.putText(frame, f"processed: {processed} ", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    # 数据
+                    csv_data.append((processed, f"{angle:.2f}", action_state.value))
 
             writer.write(frame)
 
@@ -158,6 +147,13 @@ class YoloBow:
         # 收尾工作
         cap.release()
         writer.release()
+
+        # 创建CSV文件
+        csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
+        csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(('帧号', '角度', '动作环节'))
+        csv_writer.writerows(csv_data)
         csv_file.close()
 
         total_time = (datetime.now() - start_time).total_seconds()
