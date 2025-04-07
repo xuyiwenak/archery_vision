@@ -74,6 +74,8 @@ def create_ui():
             with gr.Column():            
                 status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
         
+        with gr.Row():
+            slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
         # 添加姿态角折线图
         with gr.Row():
             arm_plot = gr.LinePlot(label="双臂姿态角", x="frame", y="angle", width=500, height=300)
