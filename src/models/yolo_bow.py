@@ -1,53 +1,14 @@
-import os
 import cv2
-import logging
-import math
 import csv
 from datetime import datetime
 
-import torch
-from ultralytics import YOLO
-import numpy as np
-
+from src.core.device import Device
+from src.core.model import Model
+from src.core.pose import Pose
 from src.enums.action_state import ActionState
-
-# 配置日志格式
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
-logger = logging.getLogger()
+from src.core.log import logger
 
 class YoloBow:
-    angle_list = []
-    release_angle = None
-
-    @classmethod
-    def get_device(cls):
-         # 自动选择最佳设备
-        device = 'cuda' if torch.cuda.is_available() else \
-                'mps' if torch.backends.mps.is_available() else 'cpu'
-        if device == 'cuda':
-            logger.info(f"🚀 使用CUDA加速: {torch.cuda.get_device_name(0)}")
-        return device
-
-    @classmethod
-    def get_model(cls):
-        # 初始化模型
-        model_name = 'yolo11x-pose'
-        model_path = f'data/models/{model_name}.pt'
-        # 如果本地没有模型文件,则下载
-        if not os.path.exists(model_path):
-            logger.info(f"⏬ 下载 {model_name} 模型...")
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            model = YOLO(f'{model_name}.pt')
-            model.export(format='pt', file=model_path)  # 保存模型到本地
-        else:
-            logger.info(f"📂 使用本地 {model_name} 模型")
-            model = YOLO(model_path)
-        return model
-    
     @classmethod
     def process_frames(cls, cap, model):
         # 定义帧缓冲区和批处理大小
@@ -78,8 +39,8 @@ class YoloBow:
 
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
-        device = cls.get_device()
-        model = cls.get_model()
+        device = Device.get_device()
+        model = Model.get_model()
         model.to(device)
         logger.info(f"✅ 加载 {model.model_name} 模型到 {device} 设备")
 
@@ -113,20 +74,18 @@ class YoloBow:
                     right_elbow = person[8].cpu().numpy()
                     # todo 未完整识别到两臂坐标时不继续做分析处理，跳过进入下一帧
                     
-                    # 绘制线段
-                    cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
-                    cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
+                    # # 绘制线段 todo 可选是否绘制双臂
+                    # cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
+                    # cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
                     # 计算夹角
-                    angle = cls.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
+                    angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
                     # 获取动作环节
-                    action_state = cls.judge_action(angle)
-                    # 绘制角度值
+                    action_state = Pose.judge_action(angle)
+                    # 绘制角度值、技术环节、帧序号
                     cv2.putText(frame, f"Angle: {angle:.2f} deg", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    # 绘制技术环节
                     cv2.putText(frame, f"Technical process: {action_state.value} ", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    # 绘制帧序号
                     cv2.putText(frame, f"processed: {processed} ", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    # 数据
+
                     csv_data.append((processed, f"{angle:.2f}", action_state.value))
 
             writer.write(frame)
@@ -163,57 +122,3 @@ class YoloBow:
             f"输出文件: {output_path}\n"
             f"数据文件: {csv_path}"
         )
-
-    @staticmethod
-    def calculate_angle(c, d, a, b) -> float:
-        """计算两向量夹角（0-360度）"""
-        # 转换为numpy数组
-        vec_ab = np.array([b[0]-a[0], b[1]-a[1]])
-        vec_cd = np.array([d[0]-c[0], d[1]-c[1]])
-        
-        # 计算模长
-        norm_ab = np.linalg.norm(vec_ab)
-        norm_cd = np.linalg.norm(vec_cd)
-        
-        if norm_ab == 0 or norm_cd == 0:
-            return 0.0
-            
-        # 计算夹角（带方向）
-        cos_theta = np.dot(vec_ab, vec_cd) / (norm_ab * norm_cd)
-        cos_theta = np.clip(cos_theta, -1.0, 1.0)
-        angle_rad = np.arccos(cos_theta)
-        
-        # 判断方向
-        cross = np.cross(vec_ab, vec_cd)
-        angle_deg = np.degrees(angle_rad)
-        return angle_deg if cross >= 0 else 360 - angle_deg
-
-    @classmethod
-    def judge_action(cls, angle):
-        """
-        根据角度判断动作环节
-        参数:
-            angle (float): 计算出的角度值 (0-360范围)
-        """
-        cls.angle_list.append(angle)
-        
-        release_angle_threshold = 4.5  # 固势->撒放 角度骤增差值阈值
-
-        if 330 <= angle < 360 or 0 < angle < 12:
-            cls.release_angle = None  # 重置撒放角
-            return ActionState.LIFT  # 举弓
-        elif 12 <= angle < 150:
-            return ActionState.DRAW  # 开弓
-        elif cls.release_angle and cls.release_angle - release_angle_threshold <= angle <= 185:
-            return ActionState.RELEASE  # 撒放
-        elif 150 <= angle < 185:
-            previous_angles = cls.angle_list[-4:-1]
-            previous_angle = sum(previous_angles) / 3  # 取前三帧的平均值
-            if min(previous_angles) >= 150 and 20 > angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
-                cls.release_angle = angle
-                return ActionState.RELEASE  # 撒放
-            return ActionState.SOLID  # 固势
-        elif 185 <= angle < 215:
-            return ActionState.RELEASE  # 撒放
-        else:
-            return ActionState.UNKNOWN

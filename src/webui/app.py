@@ -62,7 +62,6 @@ def create_ui():
     with gr.Blocks(title="射箭姿态分析", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 🎯 射箭姿态分析")
         # todo 模型选择
-        # todo 设备选择，默认cpu
         # todo 选择 batch size
         # todo 左右手持弓选择，默认左手持弓
         with gr.Row():
