@@ -1,21 +1,24 @@
 import cv2
 import csv
 from datetime import datetime
+import pandas as pd
 
 from src.core.device import Device
 from src.core.model import Model
 from src.core.pose import Pose
+from src.core.video import Video
 from src.enums.action_state import ActionState
-from src.core.log import logger
+from src.core.log import logger, log_process
 
 class YoloBow:
     @classmethod
-    def process_frames(cls, cap, model):
+    @log_process
+    def process_frames(cls, video, model):
         # 定义帧缓冲区和批处理大小
         frame_buffer = []
         batch_size = 12  # 根据显存调整批处理大小
-        while cap.isOpened():
-            success, frame = cap.read()
+        while video.capture.isOpened():
+            success, frame = video.capture.read()
             if not success: 
                 if frame_buffer:
                     results = model.track(frame_buffer, imgsz=320, conf=0.5, verbose=False, stream=True)
@@ -36,7 +39,6 @@ class YoloBow:
     @classmethod
     def process_video(cls, input_path, output_path):
         start_time = datetime.now()
-
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
         device = Device.get_device()
@@ -44,20 +46,12 @@ class YoloBow:
         model.to(device)
         logger.info(f"✅ 加载 {model.model_name} 模型到 {device} 设备")
 
-        # 视频输入
-        cap = cv2.VideoCapture(input_path)
-        # 视频属性
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        frame_size = (int(cap.get(3)), int(cap.get(4)))
-        logger.info(f"📊 视频信息: {total_frames}帧 | {fps}FPS | 尺寸 {frame_size}")
-        # 视频输出
-        writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'avc1'), fps, frame_size)
+        video = Video(input_path, output_path)
+        # 数据记录 角度值、技术环节、帧序号
+        records = pd.DataFrame(columns=['帧号', '角度', '动作环节'])
         # 处理循环
         processed = 0
-        
-        csv_data = []
-        for frame, result in cls.process_frames(cap, model):
+        for frame, result in cls.process_frames(video, model):
             frame = result.plot(boxes=False)
             angle = 0
             action_state = ActionState.UNKNOWN
@@ -77,43 +71,21 @@ class YoloBow:
                     # # 绘制线段 todo 可选是否绘制双臂
                     # cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
                     # cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
-                    # 计算夹角
-                    angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
-                    # 获取动作环节
-                    action_state = Pose.judge_action(angle)
+                    
+                    angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)  # 计算夹角
+                    action_state = Pose.judge_action(angle)  # 获取动作环节
                     # 绘制角度值、技术环节、帧序号
-                    cv2.putText(frame, f"Angle: {angle:.2f} deg", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    cv2.putText(frame, f"Technical process: {action_state.value} ", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    cv2.putText(frame, f"processed: {processed} ", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    frame = cls.put_texts(frame, (f"processed: {processed}", f"Angle: {angle:.2f} deg", f"Technical process: {action_state.value}"))   
+                    # 记录数据                    
+                    pd.concat((records, pd.DataFrame((processed, f"{angle:.2f}", action_state.value))))
 
-                    csv_data.append((processed, f"{angle:.2f}", action_state.value))
-
-            writer.write(frame)
-
-            # 进度日志
-            processed += 1
-            if processed % 30 == 0:  # 每30帧输出一次进度
-                elapsed = (datetime.now() - start_time).total_seconds()
-                fps_log = processed / elapsed
-                remain = (total_frames - processed) / fps_log if fps_log > 0 else 0
-                logger.info(
-                    f"⏳ 进度: {processed}/{total_frames} "
-                    f"({processed/total_frames:.0%}) | "
-                    f"耗时: {elapsed:.1f}s | "
-                    f"剩余: {remain:.1f}s"
-                )
+            video.writer.write(frame)
 
         # 收尾工作
-        cap.release()
-        writer.release()
-
+        video.close()
         # 创建CSV文件
         csv_path = output_path.rsplit('.', 1)[0] + '_data.csv'
-        csv_file = open(csv_path, 'w', newline='', encoding='utf-8')
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(('帧号', '角度', '动作环节'))
-        csv_writer.writerows(csv_data)
-        csv_file.close()
+        records.to_csv(csv_path, index=False, encoding='utf-8')
 
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info(
@@ -122,3 +94,9 @@ class YoloBow:
             f"输出文件: {output_path}\n"
             f"数据文件: {csv_path}"
         )
+
+    @classmethod
+    def put_texts(cls, frame, texts):
+        for k, text in enumerate(texts):
+            cv2.putText(frame, text, (50, (k + 1) * 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        return frame
