@@ -43,3 +43,8 @@ data/models/*
 
 # Logs
 *.log
+
+*.mp4
+*.mkv
+*.whl
+*.csv
