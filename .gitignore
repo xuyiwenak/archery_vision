@@ -48,3 +48,4 @@ data/models/*
 *.mkv
 *.whl
 *.csv
+*.DS_Store

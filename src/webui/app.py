@@ -25,16 +25,7 @@ def process_video(video_path):
         YoloBow.process_video(video_path, output_path)
         
         # 读取CSV数据
-        angles = []
-        with open(csv_path, 'r', encoding='utf8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                angles.append({
-                    "frame": int(row['帧号']),
-                    "angle": float(row['角度']),
-                    "state": row['动作环节']
-                })
-                
+        angles = pd.read_csv(csv_path, encoding='utf8')
         return {
             "video_path": output_path,
             "angles": angles
@@ -50,8 +41,7 @@ def process_with_status(video):
     result = process_video(video)
     if result:
         # 准备折线图数据(转换为DataFrame)
-        arm_df = pd.DataFrame([{"frame": a["frame"], "angle": a["angle"]} for a in result["angles"]])
-        return result["video_path"], arm_df, "处理完成"
+        return result["video_path"], result["angles"], "处理完成"
     else:
         return None, None, "处理失败，请检查控制台输出"
 
@@ -77,7 +67,7 @@ def create_ui():
             slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
         # 添加姿态角折线图
         with gr.Row():
-            arm_plot = gr.LinePlot(label="双臂姿态角", x="frame", y="angle", width=500, height=300)
+            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", width=500, height=300)
             
         # 视频播放时更新游标线
         def update_cursor(video_state, data):

@@ -50,8 +50,7 @@ class YoloBow:
         # 数据记录 角度值、技术环节、帧序号
         records = pd.DataFrame(columns=['帧号', '角度', '动作环节'])
         # 处理循环
-        processed = 0
-        for frame, result in cls.process_frames(video, model):
+        for processed, (frame, result) in enumerate(cls.process_frames(video, model)):
             frame = result.plot(boxes=False)
             angle = 0
             action_state = ActionState.UNKNOWN
@@ -76,8 +75,8 @@ class YoloBow:
                     action_state = Pose.judge_action(angle)  # 获取动作环节
                     # 绘制角度值、技术环节、帧序号
                     frame = cls.put_texts(frame, (f"processed: {processed}", f"Angle: {angle:.2f} deg", f"Technical process: {action_state.value}"))   
-                    # 记录数据                    
-                    pd.concat((records, pd.DataFrame((processed, f"{angle:.2f}", action_state.value))))
+                    # 记录数据                   
+                    records.loc[len(records)] = [processed, round(angle, 2), action_state.value]
 
             video.writer.write(frame)
 
