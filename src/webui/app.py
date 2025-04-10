@@ -35,15 +35,25 @@ def process_video(video_path):
         raise e
         return None            
     
+
 def process_with_status(video):
     if not video:
-        return None, None, "请先上传视频"
+        return None, None, "请先上传视频", None
     result = process_video(video)
     if result:
         # 准备折线图数据(转换为DataFrame)
-        return result["video_path"], result["angles"], "处理完成"
+        slider = gr.Slider(minimum=0, maximum=len(result["angles"]), value=5, step=1, label="拖动滑块移动游标", interactive=True)
+        return result["video_path"], result["angles"], "处理完成", slider
     else:
-        return None, None, "处理失败，请检查控制台输出"
+        return None, None, "处理失败，请检查控制台输出", None
+
+
+# 视频播放时更新游标线
+def update_cursor(video_state, data, slider):
+    if data:
+        return data, slider
+    return data, slider
+
 
 # todo 合并 process_video + process_with_status
 
@@ -64,35 +74,22 @@ def create_ui():
                 status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
         
         with gr.Row():
-            slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
+            # slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
+            slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
         # 添加姿态角折线图
         with gr.Row():
             arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", width=500, height=300)
             
-        # 视频播放时更新游标线
-        def update_cursor(video_state, data):
-            if isinstance(video_state, dict) and video_state.get("playing"):
-                current_time = video_state.get("time", 0)
-                fps = 30  # 应根据实际视频帧率获取
-                current_frame = int(current_time * fps)
-                # 在原有数据基础上添加游标线
-                data = data.copy()
-                data['cursor'] = (data['frame'] == current_frame).astype(int)
-                return data
-            else:
-                return data
-
-            
-        output_video.change(
-            fn=update_cursor,
-            inputs=[output_video, arm_plot],
-            outputs=[arm_plot]
-        )
+        # slider.change(
+        #     fn=update_cursor,
+        #     inputs=[output_video, arm_plot, slider],
+        #     outputs=[arm_plot, slider]
+        # )
 
         process_btn.click(
             fn=process_with_status,
             inputs=[input_video],
-            outputs=[output_video, arm_plot, status_text]
+            outputs=[output_video, arm_plot, status_text, slider]
         )
         
     return app
