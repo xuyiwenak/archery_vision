@@ -1,11 +1,8 @@
 import gradio as gr
 import os
 import pandas as pd
+import cv2
 from src.models.yolo_bow import YoloBow
-import warnings
-import signal
-import sys
-import csv
 
 def process_video(video_path):
     """处理上传的视频文件"""
@@ -37,16 +34,42 @@ def process_video(video_path):
         return None            
     
 
+def extract_frame(video_path, frame_number):
+    """从视频中提取指定帧号的图像"""
+    if not video_path or not os.path.exists(video_path):
+        return None
+    
+    try:
+        cap = cv2.VideoCapture(video_path)
+        # 设置帧位置
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        # 读取指定帧
+        success, frame = cap.read()
+        cap.release()
+        
+        if success:
+            # 将BGR格式转换为RGB格式
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            return frame_rgb
+        else:
+            print(f"无法读取帧 {frame_number}")
+            return None
+    except Exception as e:
+        print(f"提取帧时发生错误: {str(e)}")
+        return None
+
 def process_with_status(video):
     if not video:
-        return None, None, "请先上传视频", None
+        return None, None, "请先上传视频", None, None
     result = process_video(video)
     if result:
         # 准备折线图数据(转换为DataFrame)
         slider = gr.Slider(minimum=0, maximum=len(result["angles"]), value=5, step=1, label="拖动滑块移动游标", interactive=True)
-        return result["video_path"], result["angles"], "处理完成", slider
+        # 提取第一帧作为初始帧
+        initial_frame = extract_frame(result["video_path"], 5)
+        return result["video_path"], result["angles"], "处理完成", slider, initial_frame
     else:
-        return None, None, "处理失败，请检查控制台输出", None
+        return None, None, "处理失败，请检查控制台输出", None, None
 
 
 # 视频播放时更新游标线
@@ -57,6 +80,14 @@ def update_cursor(data, slider):
         return data
     
     return None
+
+# 滑动滑块时提取并显示对应的视频帧
+def update_frame(video_path, frame_number):
+    if not video_path:
+        return None
+    
+    frame = extract_frame(video_path, frame_number)
+    return frame
 
 
 # todo 合并 process_video + process_with_status
@@ -78,7 +109,8 @@ def create_ui():
                 output_video = gr.Video(label="分析结果", format="mp4", interactive=False)
             with gr.Column():            
                 status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
-        
+        with gr.Row():
+            current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
         with gr.Row():
             # slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
             slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
@@ -91,11 +123,18 @@ def create_ui():
             inputs=[arm_plot, slider],
             outputs=[arm_plot]
         )
+        
+        # 添加滑块改变时更新帧图像的事件
+        slider.change(
+            fn=update_frame,
+            inputs=[output_video, slider],
+            outputs=[current_frame]
+        )
 
         process_btn.click(
             fn=process_with_status,
             inputs=[input_video],
-            outputs=[output_video, arm_plot, status_text, slider]
+            outputs=[output_video, arm_plot, status_text, slider, current_frame]
         )
         
     return app
