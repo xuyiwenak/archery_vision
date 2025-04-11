@@ -58,7 +58,7 @@ def extract_frame(video_path, frame_number):
         print(f"提取帧时发生错误: {str(e)}")
         return None
 
-def process_with_status(video):
+def process_with_status(video, model, batch_size, bow_hand):
     if not video:
         return None, None, "请先上传视频", None, None
     result = process_video(video)
@@ -97,26 +97,39 @@ def create_ui():
     with gr.Blocks(title="Archery Vision", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 🎯 Archery Vision")
         
-        arm_plot_data = gr.State() 
-        # todo 模型选择
-        # todo 选择 batch size
-        # todo 左右手持弓选择，默认左手持弓
-        with gr.Row():
-            with gr.Column():
-                input_video = gr.Video(label="上传视频", sources="upload", interactive=True)
-                process_btn = gr.Button("开始分析", variant="primary")
-            with gr.Column():
-                output_video = gr.Video(label="分析结果", format="mp4", interactive=False)
-            with gr.Column():            
-                status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
-        with gr.Row():
-            current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
-        with gr.Row():
-            # slider = gr.Slider(0, 10, value=5, step=0.1, label="拖动滑块移动游标")
-            slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
-        # 添加姿态角折线图
-        with gr.Row():
-            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", color='定位', width=500, height=300)
+        with gr.Tabs() as tabs:
+            with gr.Tab("1.视频处理"):
+                with gr.Row():
+                    device_dropdown = gr.Dropdown( label="设备选择", choices=["auto", "cpu", "cuda", "mps"], value="auto", interactive=True)
+                    bow_hand = gr.Dropdown( label="持弓手", choices=["左手", "右手"], value="左手", interactive=True)
+                    model_dropdown = gr.Dropdown( label="模型选择", choices=["yolo11x-pose"], value="yolo11x-pose", interactive=True)
+                    batch_size = gr.Number(label="Batch Size", value=8, minimum=1, maximum=32, step=2, precision=0, interactive=True)
+                with gr.Row():
+                    with gr.Column():
+                        input_video = gr.Video(label="上传视频", sources="upload", interactive=True)
+                    with gr.Column():
+                        output_video = gr.Video(label="分析结果", format="mp4", interactive=False)
+                with gr.Row():         
+                    process_btn = gr.Button("开始分析", variant="primary")
+                with gr.Row():         
+                    status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
+
+            with gr.Tab("2.数据分析"):
+                with gr.Row():
+                    current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
+                with gr.Row():
+                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
+                with gr.Row():
+                    # 使用TabItem组件替换原来的单个图表
+                    with gr.Tabs():
+                        with gr.TabItem("双臂姿态角"):
+                            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", color='定位', width=500, height=300)
+                        with gr.TabItem("角速度"):
+                            angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", color='定位', width=500, height=300)
+                        with gr.TabItem("角加速度"):
+                            angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
+                        with gr.TabItem("相位图"):
+                            phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
             
         slider.change(
             fn=update_cursor,
