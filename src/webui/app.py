@@ -24,6 +24,9 @@ def process_video(video_path):
         # 读取CSV数据
         angles = pd.read_csv(csv_path, encoding='utf8')
         angles['定位'] = ''
+        angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
+        angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
+        
         return {
             "video_path": output_path,
             "angles": angles
@@ -60,16 +63,16 @@ def extract_frame(video_path, frame_number):
 
 def process_with_status(video, model, batch_size, bow_hand):
     if not video:
-        return None, None, "请先上传视频", None, None
+        return "请先上传视频", *[None]*4
     result = process_video(video)
     if result:
         # 准备折线图数据(转换为DataFrame)
         slider = gr.Slider(minimum=0, maximum=len(result["angles"]), value=5, step=1, label="拖动滑块移动游标", interactive=True)
         # 提取第一帧作为初始帧
         initial_frame = extract_frame(result["video_path"], 5)
-        return result["video_path"], result["angles"], "处理完成", slider, initial_frame
+        return "处理完成", result["video_path"],  slider, initial_frame, *[result["angles"]]*4
     else:
-        return None, None, "处理失败，请检查控制台输出", None, None
+        return  "处理失败，请检查控制台输出", *[None]*4
 
 
 # 视频播放时更新游标线
@@ -136,6 +139,24 @@ def create_ui():
             inputs=[arm_plot, slider],
             outputs=[arm_plot]
         )
+
+        slider.change(
+            fn=update_cursor,
+            inputs=[angular_velocity_plot, slider],
+            outputs=[angular_velocity_plot]
+        )
+
+        slider.change(
+            fn=update_cursor,
+            inputs=[angular_acceleration_plot, slider],
+            outputs=[angular_acceleration_plot]
+        )
+
+        slider.change(
+            fn=update_cursor,
+            inputs=[phase_plot, slider],
+            outputs=[phase_plot]
+        )
         
         # 添加滑块改变时更新帧图像的事件
         slider.change(
@@ -147,7 +168,7 @@ def create_ui():
         process_btn.click(
             fn=process_with_status,
             inputs=[input_video],
-            outputs=[output_video, arm_plot, status_text, slider, current_frame]
+            outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )
         
     return app
