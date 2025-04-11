@@ -26,6 +26,7 @@ def process_video(video_path):
         
         # 读取CSV数据
         angles = pd.read_csv(csv_path, encoding='utf8')
+        angles['定位'] = ''
         return {
             "video_path": output_path,
             "angles": angles
@@ -49,18 +50,23 @@ def process_with_status(video):
 
 
 # 视频播放时更新游标线
-def update_cursor(video_state, data, slider):
+def update_cursor(data, slider):
     if data:
-        return data, slider
-    return data, slider
+        data['data'] = [point for point in data['data'] if point[3] != '游标']  # 删除之前的游标数据
+        data['data'].extend([[slider, 0, '', '游标'],[slider, 360, '', '游标'],])  # 添加新的游标数据
+        return data
+    
+    return None
 
 
 # todo 合并 process_video + process_with_status
 
 # 创建Gradio界面
 def create_ui():
-    with gr.Blocks(title="射箭姿态分析", theme=gr.themes.Soft()) as app:
-        gr.Markdown("# 🎯 射箭姿态分析")
+    with gr.Blocks(title="Archery Vision", theme=gr.themes.Soft()) as app:
+        gr.Markdown("# 🎯 Archery Vision")
+        
+        arm_plot_data = gr.State() 
         # todo 模型选择
         # todo 选择 batch size
         # todo 左右手持弓选择，默认左手持弓
@@ -78,13 +84,13 @@ def create_ui():
             slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
         # 添加姿态角折线图
         with gr.Row():
-            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", width=500, height=300)
+            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", color='定位', width=500, height=300)
             
-        # slider.change(
-        #     fn=update_cursor,
-        #     inputs=[output_video, arm_plot, slider],
-        #     outputs=[arm_plot, slider]
-        # )
+        slider.change(
+            fn=update_cursor,
+            inputs=[arm_plot, slider],
+            outputs=[arm_plot]
+        )
 
         process_btn.click(
             fn=process_with_status,
