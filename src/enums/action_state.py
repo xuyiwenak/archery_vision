@@ -7,4 +7,4 @@ class ActionState(Enum):
     DRAW = "Draw"       # 开弓
     SOLID = "Solid"     # 固势
     RELEASE = "Release" # 撒放
-    UNKNOWN = ""        # 未知状态
+    UNKNOWN = "Unknown"        # 未知状态

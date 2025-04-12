@@ -33,8 +33,7 @@ def process_video(video_path):
         }
     except Exception as e:
         print(f"处理视频时发生错误: {str(e)}")
-        raise e
-        return None            
+        raise e         
     
 
 def extract_frame(video_path, frame_number):
@@ -61,7 +60,7 @@ def extract_frame(video_path, frame_number):
         print(f"提取帧时发生错误: {str(e)}")
         return None
 
-def process_with_status(video, model, batch_size, bow_hand):
+def process_with_status(video, user_options):
     if not video:
         return "请先上传视频", *[None]*4
     result = process_video(video)
@@ -78,8 +77,8 @@ def process_with_status(video, model, batch_size, bow_hand):
 # 视频播放时更新游标线
 def update_cursor(data, slider):
     if data:
-        data['data'] = [point for point in data['data'] if point[3] != '游标']  # 删除之前的游标数据
-        data['data'].extend([[slider, 0, '', '游标'],[slider, 360, '', '游标'],])  # 添加新的游标数据
+        # data['data'] = [point for point in data['data'] if point[3] != '游标']  # 删除之前的游标数据
+        # data['data'].extend([[slider, 0, '', '游标'],[slider, 360, '', '游标'],])  # 添加新的游标数据
         return data
     
     return None
@@ -116,7 +115,7 @@ def create_ui():
                 with gr.Row():         
                     process_btn = gr.Button("开始分析", variant="primary")
                 with gr.Row():         
-                    status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
+                    status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")  # todo 处理完成后可下载csv数据
 
             with gr.Tab("2.数据分析"):
                 with gr.Row():
@@ -124,15 +123,11 @@ def create_ui():
                 with gr.Row():
                     slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)  # todo 点击按钮按帧前后移动
                 with gr.Row():
-                    with gr.Tabs():
-                        with gr.TabItem("双臂姿态角"):
-                            arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", color='定位', width=500, height=300)
-                        with gr.TabItem("角速度"):
-                            angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", color='定位', width=500, height=300)
-                        with gr.TabItem("角加速度"):
-                            angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
-                        with gr.TabItem("相位图"):
-                            phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
+                    arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="角度", color='动作环节', width=500, height=300)
+                    angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", color='定位', width=500, height=300)
+                with gr.Row():
+                    angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
+                    phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
             
         slider.change(
             fn=update_frame,inputs=[output_video, slider],outputs=[current_frame]
@@ -156,10 +151,14 @@ def create_ui():
           fn=lambda user_options, x: user_options.update({'batch_size': x}), inputs=[user_options, batch_size], outputs=[user_options]
         ).then(
             fn=process_with_status,
-            inputs=[input_video],
+            inputs=[input_video, user_options],
             outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )
-
+    # todo 头部姿态角 头部与脊柱的夹角：
+    # 关键错误姿势示例
+    # 前肩耸肩（肩角 < 150°）：导致肩部疲劳，箭着点偏低。
+    # 后肘塌陷（肘角 < 100°）：力量分散，撒放不干脆。
+    # 脊柱侧倾（左右倾斜 > 5°）：影响瞄准一致性，长期导致腰背劳损。
     return app
 
 if __name__ == "__main__":
