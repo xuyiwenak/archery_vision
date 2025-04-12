@@ -103,6 +103,7 @@ def create_ui():
         with gr.Tabs() as tabs:
             with gr.Tab("1.视频处理"):
                 with gr.Row():
+                    user_options = gr.BrowserState({})
                     device_dropdown = gr.Dropdown( label="设备选择", choices=["auto", "cpu", "cuda", "mps"], value="auto", interactive=True)
                     bow_hand = gr.Dropdown( label="持弓手", choices=["左手", "右手"], value="左手", interactive=True)
                     model_dropdown = gr.Dropdown( label="模型选择", choices=["yolo11x-pose"], value="yolo11x-pose", interactive=True)
@@ -119,11 +120,10 @@ def create_ui():
 
             with gr.Tab("2.数据分析"):
                 with gr.Row():
-                    current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
+                    current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)  # todo 图片高度可调整
                 with gr.Row():
-                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
+                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)  # todo 点击按钮按帧前后移动
                 with gr.Row():
-                    # 使用TabItem组件替换原来的单个图表
                     with gr.Tabs():
                         with gr.TabItem("双臂姿态角"):
                             arm_plot = gr.LinePlot(label="双臂姿态角", x="帧号", y="角度", color='定位', width=500, height=300)
@@ -135,42 +135,31 @@ def create_ui():
                             phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
             
         slider.change(
-            fn=update_cursor,
-            inputs=[arm_plot, slider],
-            outputs=[arm_plot]
-        )
-
-        slider.change(
-            fn=update_cursor,
-            inputs=[angular_velocity_plot, slider],
-            outputs=[angular_velocity_plot]
-        )
-
-        slider.change(
-            fn=update_cursor,
-            inputs=[angular_acceleration_plot, slider],
-            outputs=[angular_acceleration_plot]
-        )
-
-        slider.change(
-            fn=update_cursor,
-            inputs=[phase_plot, slider],
-            outputs=[phase_plot]
-        )
-        
-        # 添加滑块改变时更新帧图像的事件
-        slider.change(
-            fn=update_frame,
-            inputs=[output_video, slider],
-            outputs=[current_frame]
+            fn=update_frame,inputs=[output_video, slider],outputs=[current_frame]
+        ).then(
+            fn=update_cursor, inputs=[arm_plot, slider], outputs=[arm_plot]
+        ).then(
+            fn=update_cursor, inputs=[angular_velocity_plot, slider], outputs=[angular_velocity_plot]
+        ).then(
+            fn=update_cursor, inputs=[angular_acceleration_plot, slider], outputs=[angular_acceleration_plot]
+        ).then(
+            fn=update_cursor, inputs=[phase_plot, slider], outputs=[phase_plot]
         )
 
         process_btn.click(
+          fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]
+        ).then(
+          fn=lambda user_options, x: user_options.update({'bow_hand': x}), inputs=[user_options, bow_hand], outputs=[user_options]
+        ).then(
+          fn=lambda user_options, x: user_options.update({'model_dropdown': x}), inputs=[user_options, model_dropdown], outputs=[user_options]
+        ).then(
+          fn=lambda user_options, x: user_options.update({'batch_size': x}), inputs=[user_options, batch_size], outputs=[user_options]
+        ).then(
             fn=process_with_status,
             inputs=[input_video],
             outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )
-        
+
     return app
 
 if __name__ == "__main__":
