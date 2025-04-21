@@ -13,10 +13,9 @@ from src.core.log import logger, log_process
 class YoloBow:
     @classmethod
     @log_process
-    def process_frames(cls, video, model):
+    def process_frames(cls, video, model, batch_size):
         # 定义帧缓冲区和批处理大小
         frame_buffer = []
-        batch_size = 12  # 根据显存调整批处理大小
         while video.capture.isOpened():
             success, frame = video.capture.read()
             if not success: 
@@ -37,12 +36,12 @@ class YoloBow:
                 frame_buffer = []
 
     @classmethod
-    def process_video(cls, input_path, output_path):
+    def process_video(cls, input_path, output_path, model_name=None, device_name=None, batch_size=12):
         start_time = datetime.now()
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
-        device = Device.get_device()
-        model = Model.get_model()
+        device = Device.get_device(device_name)
+        model = Model.get_model(model_name)
         model.to(device)
         logger.info(f"✅ 加载 {model.model_name} 模型到 {device} 设备")
 
@@ -50,7 +49,7 @@ class YoloBow:
         # 数据记录 角度值、技术环节、帧序号
         records = pd.DataFrame(columns=['帧号', '角度', '动作环节'])
         # 处理循环
-        for processed, (frame, result) in enumerate(cls.process_frames(video, model)):
+        for processed, (frame, result) in enumerate(cls.process_frames(video, model, batch_size)):
             frame = result.plot(boxes=False)
             angle = 0
             action_state = ActionState.UNKNOWN
@@ -66,11 +65,9 @@ class YoloBow:
                     left_elbow = person[7].cpu().numpy()
                     right_elbow = person[8].cpu().numpy()
                     # todo 未完整识别到两臂坐标时不继续做分析处理，跳过进入下一帧
-                    
                     # # 绘制线段 todo 可选是否绘制双臂
                     # cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
                     # cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
-                    
                     angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)  # 计算夹角
                     action_state = Pose.judge_action(angle)  # 获取动作环节
                     # 绘制角度值、技术环节、帧序号

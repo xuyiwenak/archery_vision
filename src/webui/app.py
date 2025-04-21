@@ -2,12 +2,13 @@ import gradio as gr
 import os
 import pandas as pd
 import cv2
+from src.core.video import Video
 from src.models.yolo_bow import YoloBow
 
-def process_video(video_path):
+def process_video(video_path, user_options):
     """处理上传的视频文件"""
     if not video_path:
-        return None
+        return "请先上传视频", *[None]*4
     
     try:
         # 获取输入视频的文件名（不含扩展名）
@@ -19,60 +20,23 @@ def process_video(video_path):
         output_path = os.path.join(output_dir, f"{base_name}_processed.mp4")
         csv_path = os.path.join(output_dir, f"{base_name}_processed_data.csv")
         # 处理视频
-        YoloBow.process_video(video_path, output_path)
-        
+        YoloBow.process_video(video_path, output_path, 
+                              model_name=user_options['model_dropdown'], device_name=user_options['device_dropdown'],
+                              batch_size=user_options['batch_size'])
         # 读取CSV数据
         angles = pd.read_csv(csv_path, encoding='utf8')
         angles['定位'] = ''
         angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
         angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
-        
-        return {
-            "video_path": output_path,
-            "angles": angles
-        }
+        # 准备折线图数据(转换为DataFrame)
+        slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
+        # 提取第一帧作为初始帧
+        initial_frame = Video.extract_frame(output_path, 5)
+        return "处理完成", output_path,  slider, initial_frame, *[angles]*4
     except Exception as e:
         print(f"处理视频时发生错误: {str(e)}")
-        raise e         
+        return  "处理失败，请检查控制台输出", *[None]*4   
     
-
-def extract_frame(video_path, frame_number):
-    """从视频中提取指定帧号的图像"""
-    if not video_path or not os.path.exists(video_path):
-        return None
-    
-    try:
-        cap = cv2.VideoCapture(video_path)
-        # 设置帧位置
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-        # 读取指定帧
-        success, frame = cap.read()
-        cap.release()
-        
-        if success:
-            # 将BGR格式转换为RGB格式
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            return frame_rgb
-        else:
-            print(f"无法读取帧 {frame_number}")
-            return None
-    except Exception as e:
-        print(f"提取帧时发生错误: {str(e)}")
-        return None
-
-def process_with_status(video, user_options):
-    if not video:
-        return "请先上传视频", *[None]*4
-    result = process_video(video)
-    if result:
-        # 准备折线图数据(转换为DataFrame)
-        slider = gr.Slider(minimum=0, maximum=len(result["angles"]), value=5, step=1, label="拖动滑块移动游标", interactive=True)
-        # 提取第一帧作为初始帧
-        initial_frame = extract_frame(result["video_path"], 5)
-        return "处理完成", result["video_path"],  slider, initial_frame, *[result["angles"]]*4
-    else:
-        return  "处理失败，请检查控制台输出", *[None]*4
-
 
 # 视频播放时更新游标线
 def update_cursor(data, slider):
@@ -83,16 +47,6 @@ def update_cursor(data, slider):
     
     return None
 
-# 滑动滑块时提取并显示对应的视频帧
-def update_frame(video_path, frame_number):
-    if not video_path:
-        return None
-    
-    frame = extract_frame(video_path, frame_number)
-    return frame
-
-
-# todo 合并 process_video + process_with_status
 
 # 创建Gradio界面
 def create_ui():
@@ -104,9 +58,9 @@ def create_ui():
                 with gr.Row():
                     user_options = gr.BrowserState({})
                     device_dropdown = gr.Dropdown( label="设备选择", choices=["auto", "cpu", "cuda", "mps"], value="auto", interactive=True)
-                    bow_hand = gr.Dropdown( label="持弓手", choices=["左手", "右手"], value="左手", interactive=True)
+                    bow_hand = gr.Dropdown( label="持弓手", choices=["left", "right"], value="left", interactive=True)
                     model_dropdown = gr.Dropdown( label="模型选择", choices=["yolo11x-pose"], value="yolo11x-pose", interactive=True)
-                    batch_size = gr.Number(label="Batch Size", value=8, minimum=1, maximum=32, step=2, precision=0, interactive=True)
+                    batch_size = gr.Number(label="Batch Size", value=8, minimum=1, maximum=64, step=2, precision=0, interactive=True)
                 with gr.Row():
                     with gr.Column():
                         input_video = gr.Video(label="上传视频", sources="upload", interactive=True)
@@ -130,7 +84,7 @@ def create_ui():
                     phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
             
         slider.change(
-            fn=update_frame,inputs=[output_video, slider],outputs=[current_frame]
+            fn=Video.extract_frame,inputs=[output_video, slider],outputs=[current_frame]
         ).then(
             fn=update_cursor, inputs=[arm_plot, slider], outputs=[arm_plot]
         ).then(
@@ -150,7 +104,7 @@ def create_ui():
         ).then(
           fn=lambda user_options, x: user_options.update({'batch_size': x}), inputs=[user_options, batch_size], outputs=[user_options]
         ).then(
-            fn=process_with_status,
+            fn=process_video,
             inputs=[input_video, user_options],
             outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )

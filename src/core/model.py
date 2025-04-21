@@ -6,9 +6,8 @@ from src.core.log import logger
 
 class Model: 
     @classmethod
-    def get_model(cls):
+    def get_model(cls, model_name='yolo11x-pose'):
         # 初始化模型
-        model_name = 'yolo11x-pose'
         model_path = f'data/models/{model_name}.pt'
         # 如果本地没有模型文件,则下载
         if not os.path.exists(model_path):
