@@ -8,34 +8,31 @@ from src.models.yolo_bow import YoloBow
 def process_video(video_path, user_options):
     """处理上传的视频文件"""
     if not video_path:
-        return "请先上传视频", *[None]*4
-    
-    try:
-        # 获取输入视频的文件名（不含扩展名）
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        # 创建输出目录（如果不存在）
-        output_dir = os.path.join("data", "output")
-        os.makedirs(output_dir, exist_ok=True)
-        # 构建输出文件路径
-        output_path = os.path.join(output_dir, f"{base_name}_processed.mp4")
-        csv_path = os.path.join(output_dir, f"{base_name}_processed_data.csv")
-        # 处理视频
-        YoloBow.process_video(video_path, output_path, 
-                              model_name=user_options['model_dropdown'], device_name=user_options['device_dropdown'],
-                              batch_size=user_options['batch_size'])
-        # 读取CSV数据
-        angles = pd.read_csv(csv_path, encoding='utf8')
-        angles['定位'] = ''
-        angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
-        angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
-        # 准备折线图数据(转换为DataFrame)
-        slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
-        # 提取第一帧作为初始帧
-        initial_frame = Video.extract_frame(output_path, 5)
-        return "处理完成", output_path,  slider, initial_frame, *[angles]*4
-    except Exception as e:
-        print(f"处理视频时发生错误: {str(e)}")
-        return  "处理失败，请检查控制台输出", *[None]*4   
+        return "请先上传视频", *[None]*7
+
+    # 获取输入视频的文件名（不含扩展名）
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    # 创建输出目录（如果不存在）
+    output_dir = os.path.join("data", "output")
+    os.makedirs(output_dir, exist_ok=True)
+    # 构建输出文件路径
+    output_path = os.path.join(output_dir, f"{base_name}_processed.mp4")
+    csv_path = os.path.join(output_dir, f"{base_name}_processed_data.csv")
+    # 处理视频
+    YoloBow.process_video(video_path, output_path, 
+                            model_name=user_options['model_dropdown'], device_name=user_options['device_dropdown'],
+                            batch_size=user_options['batch_size'])
+    # 读取CSV数据
+    angles = pd.read_csv(csv_path, encoding='utf8')
+    angles['定位'] = ''
+    angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
+    angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
+    # 准备折线图数据(转换为DataFrame)
+    slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
+    # 提取第一帧作为初始帧
+    initial_frame = Video.extract_frame(output_path, 5)
+    return "处理完成", output_path,  slider, initial_frame, *[angles]*4
+
     
 
 # 视频播放时更新游标线
