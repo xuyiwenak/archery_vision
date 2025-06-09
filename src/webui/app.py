@@ -20,8 +20,9 @@ def process_video(video_path, user_options):
     csv_path = os.path.join(output_dir, f"{base_name}_processed_data.csv")
     # 处理视频
     YoloBow.process_video(video_path, output_path, 
-                            model_name=user_options['model_dropdown'], device_name=user_options['device_dropdown'],
-                            batch_size=user_options['batch_size'])
+                            model_name=user_options.get('model_dropdown', 'yolo11x-pose'), 
+                            device_name=user_options.get('device_dropdown', 'auto'),
+                            batch_size=user_options.get('batch_size', 8))
     # 读取CSV数据
     angles = pd.read_csv(csv_path, encoding='utf8')
     angles['定位'] = ''
@@ -51,6 +52,7 @@ def create_ui():
         gr.Markdown("# 🎯 Archery Vision")
         
         with gr.Tabs() as tabs:
+
             with gr.Tab("1.视频处理"):
                 with gr.Row():
                     user_options = gr.BrowserState({})
@@ -80,6 +82,20 @@ def create_ui():
                     angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
                     phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
             
+        process_btn.click(
+            fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]
+        ).then(
+            fn=lambda user_options, x: user_options.update({'bow_hand': x}), inputs=[user_options, bow_hand], outputs=[user_options]
+        ).then(
+            fn=lambda user_options, x: user_options.update({'model_dropdown': x}), inputs=[user_options, model_dropdown], outputs=[user_options]
+        ).then(
+            fn=lambda user_options, x: user_options.update({'batch_size': x}), inputs=[user_options, batch_size], outputs=[user_options]
+        ).then(
+            fn=process_video,
+            inputs=[input_video, user_options],
+            outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
+        )
+
         slider.change(
             fn=Video.extract_frame,inputs=[output_video, slider],outputs=[current_frame]
         ).then(
@@ -92,19 +108,7 @@ def create_ui():
             fn=update_cursor, inputs=[phase_plot, slider], outputs=[phase_plot]
         )
 
-        process_btn.click(
-          fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]
-        ).then(
-          fn=lambda user_options, x: user_options.update({'bow_hand': x}), inputs=[user_options, bow_hand], outputs=[user_options]
-        ).then(
-          fn=lambda user_options, x: user_options.update({'model_dropdown': x}), inputs=[user_options, model_dropdown], outputs=[user_options]
-        ).then(
-          fn=lambda user_options, x: user_options.update({'batch_size': x}), inputs=[user_options, batch_size], outputs=[user_options]
-        ).then(
-            fn=process_video,
-            inputs=[input_video, user_options],
-            outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
-        )
+
     # todo 头部姿态角 头部与脊柱的夹角：
     # 关键错误姿势示例
     # 前肩耸肩（肩角 < 150°）：导致肩部疲劳，箭着点偏低。
