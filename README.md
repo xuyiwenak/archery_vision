@@ -58,6 +58,14 @@ source .venv/bin/activate  # Linux/Mac
 uv sync
 ```
 
+4. 模型下载：
+系统会在首次运行时自动下载所需的YOLO模型。如果自动下载失败，请按以下步骤手动下载：
+
+- 访问 [Ultralytics Model Hub](https://github.com/ultralytics/assets/releases/download/v8.3.0/)
+- 下载以下模型文件：
+  - yolo11x-pose.pt
+- 将下载的模型文件放入 `data/models` 目录
+
 ## 使用限制
 
 目前系统存在以下使用限制：
@@ -75,9 +83,16 @@ uv sync
 
 1. 准备视频文件并放入 `data/input` 目录
 
-2. 运行分析程序：
+2. 启动程序：
+
+### 命令行模式
 ```bash
 python main.py
+```
+
+### 图形界面模式
+```bash
+python -m src.webui.app
 ```
 
 3. 查看输出结果：
