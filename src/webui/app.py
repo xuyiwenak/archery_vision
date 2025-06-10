@@ -1,7 +1,6 @@
 import gradio as gr
 import os
 import pandas as pd
-import cv2
 from src.core.video import Video
 from src.models.yolo_bow import YoloBow
 

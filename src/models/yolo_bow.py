@@ -1,5 +1,4 @@
 import cv2
-import csv
 from datetime import datetime
 import pandas as pd
 
@@ -36,7 +35,7 @@ class YoloBow:
                 frame_buffer = []
 
     @classmethod
-    def process_video(cls, input_path, output_path, model_name=None, device_name=None, batch_size=12):
+    def process_video(cls, input_path, output_path, model_name='yolo11x-pose', device_name='auto', batch_size=12):
         start_time = datetime.now()
         logger.info(f"▶️ 开始处理 {input_path} → {output_path}")
 
