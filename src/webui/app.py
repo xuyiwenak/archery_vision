@@ -4,6 +4,7 @@ import pandas as pd
 from src.core.video import Video
 from src.models.yolo_bow import YoloBow
 
+
 def process_video(video_path, user_options):
     """处理上传的视频文件"""
     if not video_path:
@@ -24,7 +25,6 @@ def process_video(video_path, user_options):
                             batch_size=user_options.get('batch_size', 8))
     # 读取CSV数据
     angles = pd.read_csv(csv_path, encoding='utf8')
-    angles['定位'] = ''
     angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
     angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
     # 准备折线图数据(转换为DataFrame)
@@ -33,7 +33,6 @@ def process_video(video_path, user_options):
     initial_frame = Video.extract_frame(output_path, 5)
     return "处理完成", output_path,  slider, initial_frame, *[angles]*4
 
-    
 
 # 视频播放时更新游标线
 def update_cursor(data, slider):
@@ -71,15 +70,19 @@ def create_ui():
 
             with gr.Tab("2.数据分析"):
                 with gr.Row():
-                    current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)  # todo 图片高度可调整
+                    with gr.Column(scale=4):
+                        current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
+                    with gr.Column(scale=1):
+                        current_frame_data = gr.Dataframe(headers=["指标", "数值"], label="当前帧数据", interactive=False)
+                        refresh_btn = gr.Button("更新图表", variant="secondary")
                 with gr.Row():
-                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)  # todo 点击按钮按帧前后移动
+                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
                 with gr.Row():
                     arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="角度", color='动作环节', width=500, height=300)
-                    angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", color='定位', width=500, height=300)
+                    angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", width=500, height=300)
                 with gr.Row():
-                    angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
-                    phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
+                    angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", width=500, height=300)
+                    phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", width=500, height=300)
             
         process_btn.click(
             fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]
@@ -94,9 +97,19 @@ def create_ui():
             inputs=[input_video, user_options],
             outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )
-
+        
         slider.change(
             fn=Video.extract_frame,inputs=[output_video, slider],outputs=[current_frame]
+        ).then(
+            fn=lambda df, idx: list(zip(df['columns'], df['data'][idx])),
+            inputs=[arm_plot, slider],
+            outputs=[current_frame_data]
+        )
+
+        refresh_btn.click(
+            fn=lambda df, idx: list(zip(df['columns'], df['data'][idx])),
+            inputs=[arm_plot, slider],
+            outputs=[current_frame_data]
         ).then(
             fn=update_cursor, inputs=[arm_plot, slider], outputs=[arm_plot]
         ).then(
