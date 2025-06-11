@@ -21,16 +21,22 @@
 archery_vision/
 ├── README.md                 # 项目说明文档
 ├── pyproject.toml           # 项目配置文件
-├── .gitignore              # Git忽略文件
-├── main.py                 # 主程序入口
+├── uv.lock                 # uv包管理器依赖锁定文件
+├── main.py                 # 命令处理入口
 ├── src/                    # 源代码目录
-│   ├── models/            # 模型相关代码
-│   │   └── yolo_bow.py    # YOLO检测模型
-│   ├── utils/             # 工具函数
-│   │   ├── angle.py      # 角度计算
-│   │   └── video.py      # 视频处理
-│   └── visualization/     # 可视化相关
-│       └── draw.py       # 绘图函数
+│   ├── core/              # 核心功能实现
+│   │   ├── device.py     # 设备管理
+│   │   ├── log.py       # 日志处理
+│   │   ├── model.py     # 模型管理
+│   │   ├── pose.py      # 姿态分析
+│   │   └── video.py     # 视频处理
+│   ├── enums/            # 枚举定义
+│   │   └── action_state.py # 动作状态枚举
+│   ├── models/           # 模型实现
+│   └── webui/            # Web界面
+│       ├── app.py       # 主界面应用
+│       └── demo.py      # 演示程序
+├── docs/                  # 文档目录
 └── data/                  # 数据目录
     ├── models/           # 预训练模型
     ├── input/           # 输入视频
