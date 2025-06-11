@@ -32,31 +32,31 @@ class Pose:
         return angle_deg if cross >= 0 else 360 - angle_deg
 
     @classmethod
-    def judge_action(cls, angle):
+    def judge_action(cls, arm_angle):
         """
-        根据角度判断动作环节
+        根据双臂姿态角判断动作环节
         参数:
-            angle (float): 计算出的角度值 (0-360范围)
+            arm_angle (float): 计算出的双臂姿态角 (0-360范围)
         """
-        cls.angle_list.append(angle)
+        cls.angle_list.append(arm_angle)
         
         release_angle_threshold = 4.5  # 固势->撒放 角度骤增差值阈值
 
-        if 330 <= angle < 360 or 0 < angle < 12:
+        if 330 <= arm_angle < 360 or 0 < arm_angle < 12:
             cls.release_angle = None  # 重置撒放角
             return ActionState.LIFT  # 举弓
-        elif 12 <= angle < 150:
+        elif 12 <= arm_angle < 150:
             return ActionState.DRAW  # 开弓
-        elif cls.release_angle and cls.release_angle - release_angle_threshold <= angle <= 185:
+        elif cls.release_angle and cls.release_angle - release_angle_threshold <= arm_angle <= 185:
             return ActionState.RELEASE  # 撒放
-        elif 150 <= angle < 185:
+        elif 150 <= arm_angle < 185:
             previous_angles = cls.angle_list[-4:-1]
             previous_angle = sum(previous_angles) / 3  # 取前三帧的平均值
-            if min(previous_angles) >= 150 and 20 > angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
-                cls.release_angle = angle
+            if min(previous_angles) >= 150 and 20 > arm_angle - previous_angle >= release_angle_threshold:  # 固势下骤增角度可视为进入撒发环节 (撒放角)
+                cls.release_angle = arm_angle
                 return ActionState.RELEASE  # 撒放
             return ActionState.SOLID  # 固势
-        elif 185 <= angle < 215:
+        elif 185 <= arm_angle < 215:
             return ActionState.RELEASE  # 撒放
         else:
             return ActionState.UNKNOWN

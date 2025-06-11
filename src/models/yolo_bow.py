@@ -1,6 +1,7 @@
 import cv2
 from datetime import datetime
 import pandas as pd
+import numpy as np
 
 from src.core.device import Device
 from src.core.model import Model
@@ -45,12 +46,13 @@ class YoloBow:
         logger.info(f"✅ 加载 {model.model_name} 模型到 {device} 设备")
 
         video = Video(input_path, output_path)
-        # 数据记录 角度值、技术环节、帧序号
-        records = pd.DataFrame(columns=['帧号', '角度', '动作环节'])
+        # 数据记录 双臂姿态角、脊柱倾角、技术环节、帧序号
+        records = pd.DataFrame(columns=['帧号', '双臂姿态角', '脊柱倾角', '动作环节'])
         # 处理循环
         for processed, (frame, result) in enumerate(cls.process_frames(video, model, batch_size)):
             frame = result.plot(boxes=False)
-            angle = 0
+            arm_angle = 0
+            spine_angle = 0
             action_state = ActionState.UNKNOWN
             # 获取关键点数据
             keypoints = result.keypoints
@@ -63,16 +65,39 @@ class YoloBow:
                     right_shoulder = person[6].cpu().numpy()
                     left_elbow = person[7].cpu().numpy()
                     right_elbow = person[8].cpu().numpy()
+                    left_hip = person[11].cpu().numpy()
+                    right_hip = person[12].cpu().numpy()
+
+                    # 计算肩部和髋部的中点
+                    shoulder_midpoint = (left_shoulder + right_shoulder) / 2
+                    hip_midpoint = (left_hip + right_hip) / 2
+                    
+                    # 计算脊柱向量与垂直线的夹角
+                    spine_vector = shoulder_midpoint - hip_midpoint
+                    vertical_vector = np.array([0, -1])  # 垂直向上的单位向量
+                    spine_angle = Pose.calculate_angle(hip_midpoint, shoulder_midpoint, hip_midpoint, hip_midpoint + vertical_vector)
+                    if spine_angle > 180:  # 将角度转换到 -180 到 180 度范围
+                        spine_angle = spine_angle - 360
+
                     # todo 未完整识别到两臂坐标时不继续做分析处理，跳过进入下一帧
                     # # 绘制线段 todo 可选是否绘制双臂
                     # cv2.line(frame, (int(left_shoulder[0]), int(left_shoulder[1])), (int(left_elbow[0]), int(left_elbow[1])), (0, 255, 0), 2)
                     # cv2.line(frame, (int(right_shoulder[0]), int(right_shoulder[1])), (int(right_elbow[0]), int(right_elbow[1])), (0, 255, 0), 2)
-                    angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)  # 计算夹角
-                    action_state = Pose.judge_action(angle)  # 获取动作环节
+                    # 绘制脊柱线段
+                    cv2.line(frame, (int(hip_midpoint[0]), int(hip_midpoint[1])), 
+                            (int(shoulder_midpoint[0]), int(shoulder_midpoint[1])), (255, 0, 0), 2)
+
+                    arm_angle = Pose.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)  # 计算双臂夹角
+                    action_state = Pose.judge_action(arm_angle)  # 获取动作环节
                     # 绘制角度值、技术环节、帧序号
-                    frame = cls.put_texts(frame, (f"processed: {processed}", f"Angle: {angle:.2f} deg", f"Technical process: {action_state.value}"))   
+                    frame = cls.put_texts(frame, (
+                        f"processed: {processed}", 
+                        f"Arm Angle: {arm_angle:.2f} deg",
+                        f"Spine Tilt: {spine_angle:.2f} deg", 
+                        f"Technical process: {action_state.value}"
+                    ))   
                     # 记录数据                   
-                    records.loc[len(records)] = [processed, round(angle, 2), action_state.value]
+                    records.loc[len(records)] = [processed, round(arm_angle, 2), round(spine_angle, 2), action_state.value]
 
             video.writer.write(frame)
 
