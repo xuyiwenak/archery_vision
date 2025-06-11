@@ -25,8 +25,22 @@ def process_video(video_path, user_options):
                             batch_size=user_options.get('batch_size', 8))
     # 读取CSV数据
     angles = pd.read_csv(csv_path, encoding='utf8')
-    angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
-    angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
+    
+    # 计算角速度，处理0-360度切换
+    def calculate_angle_diff(angles_series):
+        diff = angles_series.diff()
+        # 处理角度突变
+        mask = abs(diff) > 180
+        diff.loc[mask & (diff > 0)] -= 360
+        diff.loc[mask & (diff < 0)] += 360
+        return diff
+
+    # 计算角速度 (度/帧)
+    angles['角速度'] = calculate_angle_diff(angles['角度'])
+    
+    # 计算角加速度 (度/帧^2)
+    angles['角加速度'] = angles['角速度'].diff()
+    
     # 准备折线图数据(转换为DataFrame)
     slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
     # 提取第一帧作为初始帧
@@ -108,7 +122,7 @@ def create_ui():
 
         refresh_btn.click(
             fn=lambda df, idx: list(zip(df['columns'], df['data'][idx])),
-            inputs=[arm_plot, slider],
+            inputs =[arm_plot, slider],
             outputs=[current_frame_data]
         ).then(
             fn=update_cursor, inputs=[arm_plot, slider], outputs=[arm_plot]
