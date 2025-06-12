@@ -47,7 +47,7 @@ archery_vision/
 
 1. 克隆项目：
 ```bash
-git clone https://github.com/yourusername/archery_vision.git
+git clone https://github.com/huiyaoren/archery_vision.git
 cd archery_vision
 ```
 
@@ -67,9 +67,9 @@ uv sync
 4. 模型下载：
 系统会在首次运行时自动下载所需的YOLO模型。如果自动下载失败，请按以下步骤手动下载：
 
-- 访问 [Ultralytics Model Hub](https://github.com/ultralytics/assets/releases/download/v8.3.0/)
+- 访问 [Ultralytics Model Hub](https://github.com/ultralytics/assets/releases/)
 - 下载以下模型文件：
-  - yolo11x-pose.pt
+  - yolov8x-pose-p6.pt
 - 将下载的模型文件放入 `data/models` 目录
 
 ## 使用限制

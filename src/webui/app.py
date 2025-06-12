@@ -75,7 +75,7 @@ def create_ui():
                     user_options = gr.BrowserState({})
                     device_dropdown = gr.Dropdown( label="设备选择", choices=["auto", "cpu", "cuda", "mps"], value="auto", interactive=True)
                     bow_hand = gr.Dropdown( label="持弓手", choices=["left", "right"], value="left", interactive=True)
-                    model_dropdown = gr.Dropdown( label="模型选择", choices=["yolo11x-pose"], value="yolo11x-pose", interactive=True)
+                    model_dropdown = gr.Dropdown( label="模型选择", choices=["yolov8x-pose-p6", "yolo11x-pose"], value="yolov8x-pose-p6", interactive=True)
                     batch_size = gr.Number(label="Batch Size", value=8, minimum=1, maximum=64, step=2, precision=0, interactive=True)
                 with gr.Row():
                     with gr.Column():
