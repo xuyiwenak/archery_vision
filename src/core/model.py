@@ -14,7 +14,8 @@ class Model:
             logger.info(f"⏬ 下载 {model_name} 模型...")
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
             model = YOLO(f'{model_name}.pt')
-            model.export(format='pt', file=model_path)  # 保存模型到本地
+            logger.info(model_path)
+            model.save(model_path)  # 保存模型到本地
         else:
             logger.info(f"📂 使用本地 {model_name} 模型")
             model = YOLO(model_path)
