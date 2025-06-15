@@ -43,7 +43,23 @@ def process_video(video_path, user_options):
     
     # 准备不同图表的数据
     arm_angle_data = angles  # 双臂姿态角数据
-    spine_angle_data = angles[['帧号', '脊柱倾角']]  # 脊柱倾角数据 
+    
+    # 添加脊柱倾角警告标记
+    spine_angle_data = angles[['帧号', '脊柱倾角']].copy()
+    spine_angle_data['警告'] = spine_angle_data['脊柱倾角'].apply(lambda x: '正常')
+
+    # 添加参考线数据
+    reference_data = pd.DataFrame({
+        '帧号': [angles['帧号'].min(), angles['帧号'].max()],
+        '上限': [5, 5],
+        '下限': [-5, -5]
+    })
+    spine_angle_data = pd.concat([
+        reference_data[['帧号', '上限']].rename(columns={'上限': '脊柱倾角'}).assign(警告='上限'),
+        reference_data[['帧号', '下限']].rename(columns={'下限': '脊柱倾角'}).assign(警告='下限'),
+        spine_angle_data
+    ])
+
     velocity_data = angles[['帧号', '角速度']]  # 角速度数据
     acceleration_data = angles[['帧号', '角加速度']]  # 角加速度数据
     phase_data = angles[['双臂姿态角', '角速度']]  # 相位图数据
@@ -98,7 +114,21 @@ def create_ui():
                     slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
                 with gr.Row():
                     arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="双臂姿态角", color='动作环节', width=500, height=300)
-                    spine_plot = gr.LinePlot(label="脊柱倾角", x="帧号", y="脊柱倾角", width=500, height=300)
+                    spine_plot = gr.LinePlot(
+                        label="脊柱倾角", 
+                        x="帧号", 
+                        y="脊柱倾角",
+                        color="警告",
+                        color_map={
+                            "正常": "#2196f3",
+                            "上限": "#ff0000",
+                            "下限": "#ff0000",
+                        },
+                        width=500, 
+                        height=300,
+                        overlay_point=True,
+                        title="脊柱倾角"
+                    )
                 with gr.Row():
                     angular_velocity_plot = gr.LinePlot(label="双臂角速度", x="帧号", y="角速度", width=500, height=300)
                     angular_acceleration_plot = gr.LinePlot(label="双臂角加速度", x="帧号", y="角加速度", width=500, height=300)
