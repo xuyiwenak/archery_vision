@@ -113,7 +113,7 @@ def create_ui():
                 with gr.Row():
                     slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
                 with gr.Row():
-                    arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="双臂姿态角", color='动作环节', width=500, height=300)
+                    arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="双臂姿态角", color='动作环节')
                     spine_plot = gr.LinePlot(
                         label="脊柱倾角", 
                         x="帧号", 
@@ -124,16 +124,13 @@ def create_ui():
                             "上限": "#ff0000",
                             "下限": "#ff0000",
                         },
-                        width=500, 
-                        height=300,
                         overlay_point=True,
-                        title="脊柱倾角"
                     )
                 with gr.Row():
-                    angular_velocity_plot = gr.LinePlot(label="双臂角速度", x="帧号", y="角速度", width=500, height=300)
-                    angular_acceleration_plot = gr.LinePlot(label="双臂角加速度", x="帧号", y="角加速度", width=500, height=300)
+                    angular_velocity_plot = gr.LinePlot(label="双臂角速度", x="帧号", y="角速度")
+                    angular_acceleration_plot = gr.LinePlot(label="双臂角加速度", x="帧号", y="角加速度")
                 with gr.Row():
-                    phase_plot = gr.ScatterPlot(label="相位图", x="双臂姿态角", y="角速度", width=500, height=300)
+                    phase_plot = gr.ScatterPlot(label="相位图", x="双臂姿态角", y="角速度")
             
         process_btn.click(
             fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]

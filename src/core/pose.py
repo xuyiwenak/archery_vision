@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 from src.enums.action_state import ActionState
 
@@ -60,3 +61,49 @@ class Pose:
             return ActionState.RELEASE  # 撒放
         else:
             return ActionState.UNKNOWN
+
+    @classmethod
+    def analyze_frame(cls, frame, result):
+        """分析单帧中的姿态数据"""
+        frame = result.plot(boxes=False)
+        arm_angle = 0
+        spine_angle = 0
+        action_state = ActionState.UNKNOWN
+
+        keypoints = result.keypoints
+        if keypoints is not None:
+            for person in keypoints.xy:
+                if len(person) < 1:
+                    continue
+                # 提取关键点数据
+                left_shoulder = person[5].cpu().numpy()
+                right_shoulder = person[6].cpu().numpy()
+                left_elbow = person[7].cpu().numpy()
+                right_elbow = person[8].cpu().numpy()
+                left_hip = person[11].cpu().numpy()
+                right_hip = person[12].cpu().numpy()
+
+                # 计算关键点
+                shoulder_midpoint = (left_shoulder + right_shoulder) / 2
+                hip_midpoint = (left_hip + right_hip) / 2
+                
+                # 计算脊柱倾角
+                spine_vector = shoulder_midpoint - hip_midpoint
+                vertical_vector = np.array([0, -1])
+                spine_angle = cls.calculate_angle(hip_midpoint, shoulder_midpoint, hip_midpoint, hip_midpoint + vertical_vector)
+                if spine_angle > 180:
+                    spine_angle = spine_angle - 360
+
+                # 绘制脊柱线段
+                cls.draw_line(frame, hip_midpoint, shoulder_midpoint)
+
+                # 计算双臂姿态角并判断动作环节
+                arm_angle = cls.calculate_angle(left_shoulder, left_elbow, right_shoulder, right_elbow)
+                action_state = cls.judge_action(arm_angle)
+
+        return frame, arm_angle, spine_angle, action_state
+
+    @staticmethod
+    def draw_line(frame, point_1, point_2):
+        """绘制线段"""
+        cv2.line(frame, (int(point_1[0]), int(point_1[1])), (int(point_2[0]), int(point_2[1])), (255, 0, 0), 2)
