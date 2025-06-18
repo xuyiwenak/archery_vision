@@ -1,12 +1,12 @@
 # 射箭姿态分析系统
 
-基于计算机视觉的美式猎弓射手姿态分析系统，通过YOLO模型实时检测和分析射手的关键姿态点，帮助教练和运动员进行技术动作分析和改进。
+基于计算机视觉的射手姿态分析系统，通过YOLO模型实时检测和分析射手的关键姿态点，帮助进行技术动作分析和改进。
 
 ## 功能特点
 
-- 实时检测射手关键点位置
-- 计算手臂夹角数据
-- 自动识别射箭技术环节（举弓、开弓、固势、撒放）
+- 实时检测射手人体关键点
+- 计算双臂姿态角、脊柱倾角
+- 识别射箭技术环节（举弓、开弓、固势、撒放）
 - 视频处理并输出分析结果
 - GPU加速支持
 
@@ -21,16 +21,23 @@
 archery_vision/
 ├── README.md                 # 项目说明文档
 ├── pyproject.toml           # 项目配置文件
-├── .gitignore              # Git忽略文件
-├── main.py                 # 主程序入口
+├── uv.lock                 # uv包管理器依赖锁定文件
+├── main.py                 # 命令处理入口
 ├── src/                    # 源代码目录
-│   ├── models/            # 模型相关代码
-│   │   └── yolo_bow.py    # YOLO检测模型
-│   ├── utils/             # 工具函数
-│   │   ├── angle.py      # 角度计算
-│   │   └── video.py      # 视频处理
-│   └── visualization/     # 可视化相关
-│       └── draw.py       # 绘图函数
+│   ├── core/              # 核心功能实现
+│   │   ├── device.py     # 设备管理
+│   │   ├── log.py       # 日志处理
+│   │   ├── model.py     # 模型管理
+│   │   ├── pose.py      # 姿态分析
+│   │   └── video.py     # 视频处理
+│   ├── enums/            # 枚举定义
+│   │   └── action_state.py # 动作状态枚举
+│   ├── models/           # 模型实现
+│   └── webui/            # Web界面
+│       ├── app.py       # 主界面应用
+│       └── demo.py      # 演示程序
+├── docs/                  # 文档目录
+│   └── images/          # 文档图片资源
 └── data/                  # 数据目录
     ├── models/           # 预训练模型
     ├── input/           # 输入视频
@@ -41,7 +48,7 @@ archery_vision/
 
 1. 克隆项目：
 ```bash
-git clone https://github.com/yourusername/archery_vision.git
+git clone https://github.com/huiyaoren/archery_vision.git
 cd archery_vision
 ```
 
@@ -58,6 +65,15 @@ source .venv/bin/activate  # Linux/Mac
 uv sync
 ```
 
+4. 模型下载：
+系统会在首次运行时自动下载所需的YOLO模型。如果自动下载失败，请按以下步骤手动下载：
+
+- 访问 [Ultralytics Model Hub](https://github.com/ultralytics/assets/releases/)
+- 下载以下模型文件：
+  - yolov8x-pose-p6.pt
+  - yolov11-pose.pt
+- 将下载的模型文件放入 `data/models` 目录
+
 ## 使用限制
 
 目前系统存在以下使用限制：
@@ -73,23 +89,29 @@ uv sync
 
 ## 使用方法
 
+### 命令行模式
 1. 准备视频文件并放入 `data/input` 目录
 
-2. 运行分析程序：
+2. 启动程序：
 ```bash
 python main.py
 ```
-
 3. 查看输出结果：
 处理后的视频将保存在 `data/output` 目录下
 
-## 技术环节说明
+### 图形界面模式
+```bash
+python -m src.webui.app
+```
 
-系统将尝试识别以下射箭技术环节：
-- 举弓 (Lift)
-- 开弓 (Draw)
-- 固势 (Solid)
-- 撒放 (Release)
+## 数据输出
+
+系统会为每个处理的视频生成以下输出：
+1. 带姿态标注的处理后视频（.mp4格式）
+2. 关键点位置和角度数据（.csv格式）
+3. 动作分段时间戳数据
+
+输出文件将保存在 `data/output` 目录下。
 
 ## 许可证
 

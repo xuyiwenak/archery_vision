@@ -1,14 +1,14 @@
 import gradio as gr
 import os
 import pandas as pd
-import cv2
 from src.core.video import Video
 from src.models.yolo_bow import YoloBow
+
 
 def process_video(video_path, user_options):
     """处理上传的视频文件"""
     if not video_path:
-        return "请先上传视频", *[None]*7
+        return "请先上传视频", *[None]*8  # 修改为8个None，总共9个返回值
 
     # 获取输入视频的文件名（不含扩展名）
     base_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -25,22 +25,55 @@ def process_video(video_path, user_options):
                             batch_size=user_options.get('batch_size', 8))
     # 读取CSV数据
     angles = pd.read_csv(csv_path, encoding='utf8')
-    angles['定位'] = ''
-    angles['角速度'] = angles['角度'].diff()  # 计算角速度 (度/帧)
-    angles['角加速度'] = angles['角速度'].diff()  # 计算角加速度 (度/帧^2)
-    # 准备折线图数据(转换为DataFrame)
-    slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
-    # 提取第一帧作为初始帧
-    initial_frame = Video.extract_frame(output_path, 5)
-    return "处理完成", output_path,  slider, initial_frame, *[angles]*4
-
     
+    # 计算角速度，处理0-360度切换
+    def calculate_angle_diff(angles_series):
+        diff = angles_series.diff()
+        # 处理角度突变
+        mask = abs(diff) > 180
+        diff.loc[mask & (diff > 0)] -= 360
+        diff.loc[mask & (diff < 0)] += 360
+        return diff
+
+    # 计算双臂姿态角速度 (度/帧)
+    angles['角速度'] = calculate_angle_diff(angles['双臂姿态角'])
+    
+    # 计算角加速度 (度/帧^2)
+    angles['角加速度'] = angles['角速度'].diff()
+    
+    # 准备不同图表的数据
+    arm_angle_data = angles  # 双臂姿态角数据
+    
+    # 添加脊柱倾角警告标记
+    spine_angle_data = angles[['帧号', '脊柱倾角']].copy()
+    spine_angle_data['警告'] = spine_angle_data['脊柱倾角'].apply(lambda x: '正常')
+
+    # 添加参考线数据
+    reference_data = pd.DataFrame({
+        '帧号': [angles['帧号'].min(), angles['帧号'].max()],
+        '上限': [5, 5],
+        '下限': [-5, -5]
+    })
+    spine_angle_data = pd.concat([
+        reference_data[['帧号', '上限']].rename(columns={'上限': '脊柱倾角'}).assign(警告='上限'),
+        reference_data[['帧号', '下限']].rename(columns={'下限': '脊柱倾角'}).assign(警告='下限'),
+        spine_angle_data
+    ])
+
+    velocity_data = angles[['帧号', '角速度']]  # 角速度数据
+    acceleration_data = angles[['帧号', '角加速度']]  # 角加速度数据
+    phase_data = angles[['双臂姿态角', '角速度']]  # 相位图数据
+
+    # 准备折线图数据
+    slider = gr.Slider(minimum=0, maximum=len(angles), value=5, step=1, label="拖动滑块移动游标", interactive=True)
+    initial_frame = Video.extract_frame(output_path, 5)
+
+    return ("处理完成", output_path, slider, initial_frame, arm_angle_data, spine_angle_data, velocity_data, acceleration_data, phase_data)
+
 
 # 视频播放时更新游标线
 def update_cursor(data, slider):
     if data:
-        # data['data'] = [point for point in data['data'] if point[3] != '游标']  # 删除之前的游标数据
-        # data['data'].extend([[slider, 0, '', '游标'],[slider, 360, '', '游标'],])  # 添加新的游标数据
         return data
     
     return None
@@ -58,7 +91,7 @@ def create_ui():
                     user_options = gr.BrowserState({})
                     device_dropdown = gr.Dropdown( label="设备选择", choices=["auto", "cpu", "cuda", "mps"], value="auto", interactive=True)
                     bow_hand = gr.Dropdown( label="持弓手", choices=["left", "right"], value="left", interactive=True)
-                    model_dropdown = gr.Dropdown( label="模型选择", choices=["yolo11x-pose"], value="yolo11x-pose", interactive=True)
+                    model_dropdown = gr.Dropdown( label="模型选择", choices=["yolov8x-pose-p6", "yolo11x-pose"], value="yolov8x-pose-p6", interactive=True)
                     batch_size = gr.Number(label="Batch Size", value=8, minimum=1, maximum=64, step=2, precision=0, interactive=True)
                 with gr.Row():
                     with gr.Column():
@@ -68,19 +101,36 @@ def create_ui():
                 with gr.Row():         
                     process_btn = gr.Button("开始分析", variant="primary")
                 with gr.Row():         
-                    status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")  # todo 处理完成后可下载csv数据
+                    status_text = gr.Textbox(label="处理状态", interactive=False, value="等待上传视频...")
 
             with gr.Tab("2.数据分析"):
                 with gr.Row():
-                    current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)  # todo 图片高度可调整
+                    with gr.Column(scale=4):
+                        current_frame = gr.Image(label="当前帧", type="numpy", interactive=False)
+                    with gr.Column(scale=1):
+                        current_frame_data = gr.Dataframe(headers=["指标", "数值"], label="当前帧数据", interactive=False)
+                        refresh_btn = gr.Button("更新图表", variant="secondary")
                 with gr.Row():
-                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)  # todo 点击按钮按帧前后移动
+                    slider = gr.Slider(minimum=0, maximum=100, value=5, step=1, label="拖动滑块移动游标", interactive=True)
                 with gr.Row():
-                    arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="角度", color='动作环节', width=500, height=300)
-                    angular_velocity_plot = gr.LinePlot(label="角速度", x="帧号", y="角速度", color='定位', width=500, height=300)
+                    arm_plot = gr.BarPlot(label="双臂姿态角", x="帧号", y="双臂姿态角", color='动作环节')
+                    spine_plot = gr.LinePlot(
+                        label="脊柱倾角", 
+                        x="帧号", 
+                        y="脊柱倾角",
+                        color="警告",
+                        color_map={
+                            "正常": "#2196f3",
+                            "上限": "#ff0000",
+                            "下限": "#ff0000",
+                        },
+                        overlay_point=True,
+                    )
                 with gr.Row():
-                    angular_acceleration_plot = gr.LinePlot(label="角加速度", x="帧号", y="角加速度", color='定位', width=500, height=300)
-                    phase_plot = gr.ScatterPlot(label="相位图", x="角度", y="角速度", color='定位', width=500, height=300)
+                    angular_velocity_plot = gr.LinePlot(label="双臂角速度", x="帧号", y="角速度")
+                    angular_acceleration_plot = gr.LinePlot(label="双臂角加速度", x="帧号", y="角加速度")
+                with gr.Row():
+                    phase_plot = gr.ScatterPlot(label="相位图", x="双臂姿态角", y="角速度")
             
         process_btn.click(
             fn=lambda user_options, x: user_options.update({'device_dropdown': x}), inputs=[user_options, device_dropdown], outputs=[user_options]
@@ -93,13 +143,25 @@ def create_ui():
         ).then(
             fn=process_video,
             inputs=[input_video, user_options],
-            outputs=[status_text, output_video, slider, current_frame, arm_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
+            outputs=[status_text, output_video, slider, current_frame, arm_plot, spine_plot, angular_velocity_plot, angular_acceleration_plot, phase_plot]
         )
-
+        
         slider.change(
             fn=Video.extract_frame,inputs=[output_video, slider],outputs=[current_frame]
         ).then(
+            fn=lambda df, idx: list(zip(df['columns'], df['data'][idx])),
+            inputs=[arm_plot, slider],
+            outputs=[current_frame_data]
+        )
+
+        refresh_btn.click(
+            fn=lambda df, idx: list(zip(df['columns'], df['data'][idx])),
+            inputs=[arm_plot, slider],
+            outputs=[current_frame_data]
+        ).then(
             fn=update_cursor, inputs=[arm_plot, slider], outputs=[arm_plot]
+        ).then(
+            fn=update_cursor, inputs=[spine_plot, slider], outputs=[spine_plot]
         ).then(
             fn=update_cursor, inputs=[angular_velocity_plot, slider], outputs=[angular_velocity_plot]
         ).then(
@@ -107,7 +169,8 @@ def create_ui():
         ).then(
             fn=update_cursor, inputs=[phase_plot, slider], outputs=[phase_plot]
         )
-
+    # todo 脊柱倾角图表增加+-5°的参考线
+    # todo 脊柱倾角超出范围时，在图表和当前帧数据中高亮显示
 
     # todo 头部姿态角 头部与脊柱的夹角：
     # 关键错误姿势示例
