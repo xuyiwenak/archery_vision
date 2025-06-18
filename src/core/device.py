@@ -9,7 +9,7 @@ class Device:
             # 自动选择最佳设备
             if torch.backends.mps.is_available():
                 device = 'mps'
-                logger.info(f"🚀 使用MPS加速: {torch.cuda.get_device_name(0)}")
+                logger.info(f"🚀 使用MPS加速")
             elif torch.cuda.is_available():
                 device = 'cuda'
                 logger.info(f"🚀 使用CUDA加速: {torch.cuda.get_device_name(0)}")
